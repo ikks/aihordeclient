@@ -1,7 +1,18 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+# Gimp3 plugin for AiHorde
+# Authors:
+#  * blueturtleai <https://github.com/blueturtleai> Original Code
+#  * Igor Támara <https://github.com/ikks>
+#
+# MIT lICENSE
+#
+# https://github.com/ikks/aihorde-client/blob/main/LICENSE
+
 from datetime import date, datetime
 from pathlib import Path
 from time import sleep
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
 
@@ -25,11 +36,26 @@ import traceback
 _ = gettext.gettext
 
 API_ROOT = "https://aihorde.net/api/v2/"
+"""
+Base URL for AIHorde API
+"""
+
 REGISTER_AI_HORDE_URL = "https://aihorde.net/register"
+"""
+Url to get an API Key from AI Horde
+"""
 ANONYMOUS_KEY = "0000000000"
-# check between 5 and 15 seconds
+
+# check between 8 and 15 seconds
 CHECK_WAIT = 8
+"""
+Minimum wait time to check if the image has been generated in seconds
+"""
+
 MAX_TIME_REFRESH = 15
+"""
+Checking for an image generation will be at most in seconds
+"""
 
 ANONYMOUS = "0000000000"
 """
@@ -41,15 +67,36 @@ DEFAULT_MODEL = "stable_diffusion"
 Model that is always present for image generation
 """
 
-
 MIN_WIDTH = 64
-MAX_WIDTH = 3_072
-MIN_HEIGHT = 64
-MAX_HEIGHT = 3_072
-MIN_PROMPT_LENGTH = 10
-MAX_MP = 4_194_304  # 2_048 * 2_048
 """
-It's  needed that the user writes down something to create an image from
+Minimum size for the image width, it's recommended to start from 384, most of the
+models are trained from 512px
+"""
+MAX_WIDTH = 3_072
+"""
+Maximum size for the image width, most of the models are trained at 512px
+"""
+
+MIN_HEIGHT = 64
+"""
+Minimum size for the image height, it's recommended to start from 384, most of the
+models are trained from 512px
+"""
+
+MAX_HEIGHT = 3_072
+"""
+Maximum size for the image width, most of the models are trained at 512px
+"""
+
+MIN_PROMPT_LENGTH = 10
+"""
+We aim to get intention from the user to generate an image, this is the minimum of
+characters that we request for the prompt    
+"""
+
+MAX_MP = 4_194_304  # 2_048 * 2_048 this is 4MP
+"""
+At most the user should request an image of 4MP
 """
 
 MODELS = [
@@ -84,43 +131,28 @@ Initial list of inpainting models, new ones are downloaded from AiHorde API
 """
 
 __HORDE_CLIENT_NAME__ = "AiHordeForGimp"
+"""
+Default Gimp Client.  Was the first to use this client
+"""
 
 
-def show_debugging_data(
-    information: Union[str, Exception, Dict[str, Any]],
-    additional: str = "",
-    important: bool = False,
-    debug: bool = False,
-) -> None:
-    """ """
-    if not debug and not isinstance(information, Exception):
-        return
-
+def log_exception(information):
     dnow = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if isinstance(information, Exception):
-        ln = information.__traceback__.tb_lineno
-        logging.error(f"[{ dnow }]{ln}: { str(information) }")
-        logging.error(
-            "".join(
-                traceback.format_exception(None, information, information.__traceback__)
-            )
+    ln = information.__traceback__.tb_lineno
+    logging.error(f"[{ dnow }]{ln}: { str(information) }")
+    logging.error(
+        "".join(
+            traceback.format_exception(None, information, information.__traceback__)
         )
-    else:
-        if important:
-            logging.debug(f"[\033[31;1;4m{ dnow }\033[0m] { information }")
-        else:
-            logging.debug(f"[{ dnow }] { information }")
-    if additional:
-        logging.debug(f"[{ dnow }]{additional}")
+    )
 
 
 class IdentifiedError(Exception):
     """
-    Exception raised for identified problems
+    Exception for identified problems with an URL
 
-    Attributes:
-        message -- explanation of the error
-        url -- Resource to understand and fix the problem
+    message: explanation of the error
+    url: Resource to understand and fix the problem
     """
 
     def __init__(self, message: str = "A custom error occurred", url: str = ""):
@@ -132,13 +164,12 @@ class IdentifiedError(Exception):
         return self.message
 
 
-class InformerFrontendInterface(metaclass=abc.ABCMeta):
+class InformerFrontend(metaclass=abc.ABCMeta):
     """
-    Implementing this interface for an application frontend
-    gives AIHordeClient a way to inform progress.  It's
-    expected that AIHordeClient receives as parameter
-    an instance of this Interface to be able to send messages
-    and updates to the user.
+    Implementing this interface for an application frontend gives
+    AIHordeClient a way to inform progress.  It's expected that
+    AIHordeClient receives as parameter an instance of this Interface
+    to be able to send messages and updates to the user.
     """
 
     @classmethod
@@ -148,10 +179,10 @@ class InformerFrontendInterface(metaclass=abc.ABCMeta):
             and callable(subclass.show_message)
             and hasattr(subclass, "show_error")
             and callable(subclass.show_error)
-            and hasattr(subclass, "get_frontend_property")
-            and callable(subclass.get_frontend_property)
-            and hasattr(subclass, "set_frontend_property")
-            and callable(subclass.set_frontend_property)
+            and hasattr(subclass, "just_asked_for_update")
+            and callable(subclass.just_asked_for_update)
+            and hasattr(subclass, "has_asked_for_update")
+            and callable(subclass.has_asked_for_update)
             and hasattr(subclass, "update_status")
             and callable(subclass.update_status)
             and hasattr(subclass, "set_finished")
@@ -189,18 +220,16 @@ class InformerFrontendInterface(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractclassmethod
-    def get_frontend_property(self, property_name: str) -> Union[str, bool, None]:
+    def has_asked_for_update(self) -> bool:
         """
-        Gets a property from the frontend application, used to retrieved stored
-        information during this session.  Used when checking for update.
+        Informs if there has been asked for update
         """
         raise NotImplementedError
 
     @abc.abstractclassmethod
-    def set_frontend_property(self, property_name: str, value: Union[str, bool]):
+    def just_asked_for_update(self) -> None:
         """
-        Sets a property in the frontend application, used to retrieved stored
-        information during this session.  Used when checking for update.
+        The update has been just asked
         """
         raise NotImplementedError
 
@@ -230,25 +259,25 @@ class InformerFrontendInterface(metaclass=abc.ABCMeta):
         """
         Expected to be invoked from AiHordeClient to store the
 
-        * URL of the image being generated and the timestamp for validity and
-        * the time when the image is expected to be generated in seconds.
+        url: of the image being generated and the timestamp for validity and
+        valid_to: the time when the image is expected to be generated in seconds.
         """
         self.generated_url = url
         # The images will be generated at most in ten minutes, else the
         # process is cancelled in the server
         self.valid_until = datetime.now().timestamp() + min(valid_to, 600)
 
-    def get_generated_image_url_status(self):  # -> (str, int, str) | None:
+    def get_generated_image_url_status(self) -> Union[Tuple[str, int, str], None]:
         """
         Expected to be invoked by the UI to fetch information for an
         image that possibly has been started to being generated,
 
         Returns:
-         None if there is no generation information
-         * else returns
-           * the URL
-           * approximate checktime to be reviewed as a timestamp
-           * text telling the URL and the expected time to be generated
+        None if there is no generation information, else returns
+
+        the URL
+        approximate checktime to be reviewed as a timestamp
+        text telling the URL and the expected time to be generated
         """
         if not self.generated_url:
             return None
@@ -268,13 +297,14 @@ class InformerFrontendInterface(metaclass=abc.ABCMeta):
 class AiHordeClient:
     """
     Interaction with AI Horde platform, currently supports:
-    * Fetch the most used models in the month
-    * Review the credits of an api_key
-    * Request an image async and go all the way down until getting the image
-    * Check if there is a newer version of the frontend client
+    * Fetching the most used models in the month
+    * Reviewing the credits of an api_key
+    * Requesting an image async and go all the way down until getting the image
+    * Checking if there is a newer version of the frontend client
 
     Attributes:
-        settings -- configured in the constructor and later updated
+
+    settings: configured in the constructor and later updated
     """
 
     # check model updates
@@ -300,17 +330,19 @@ class AiHordeClient:
     """
 
     MODEL_REQUIREMENTS_URL = "https://raw.githubusercontent.com/Haidra-Org/AI-Horde-image-model-reference/refs/heads/main/stable_diffusion.json"
+    """
+    URL of model requirements, the information is injected in the payload to have defaults and avoid warnings
+    """
 
     def __init__(
         self,
-        current_local_session_key: str,
         client_version: str,
         url_version_update: str,
         client_help_url: str,
         client_download_url: str,
         settings: json = None,
         client_name: str = __HORDE_CLIENT_NAME__,
-        informer: InformerFrontendInterface = None,
+        informer: InformerFrontend = None,
     ):
         """
         Creates a AI Horde client with the settings, if None, the API_KEY is
@@ -323,9 +355,8 @@ class AiHordeClient:
         else:
             self.settings: json = settings
 
-        self.current_local_session_key: str = current_local_session_key
-        self.url_version_update: str = url_version_update
         self.client_version: str = client_version
+        self.url_version_update: str = url_version_update
         self.client_help_url: str = client_help_url
         self.client_download_url: str = client_download_url
 
@@ -337,7 +368,7 @@ class AiHordeClient:
             "apikey": self.api_key,
             "Client-Agent": self.client_name,
         }
-        self.informer: InformerFrontendInterface = informer
+        self.informer: InformerFrontend = informer
         self.progress: float = 0.0
         self.progress_text: str = _("Starting...")
         self.warnings: List[Dict[str, Any]] = []
@@ -348,7 +379,7 @@ class AiHordeClient:
         dt = self.headers.copy()
         del dt["apikey"]
         # Beware, not logging the api_key
-        show_debugging_data(dt)
+        logging.debug(dt)
 
     def __url_open__(
         self,
@@ -378,21 +409,21 @@ class AiHordeClient:
             context = ssl._create_unverified_context()
             if only_read:
                 with urlopen(url, timeout=timeout, context=context) as response:
-                    show_debugging_data("windows working")
+                    logging.debug("windows working")
                     self.response_data = response.read()
             else:
                 with urlopen(url, timeout=timeout, context=context) as response:
-                    show_debugging_data("Data arrived")
+                    logging.debug("Data arrived")
                     self.response_data = json.loads(response.read().decode("utf-8"))
 
         def real_url_open():
-            show_debugging_data(f"starting request {url}")
+            logging.debug(f"starting request {url}")
             try:
                 if os.name == "nt" and self.client_name == "AiHordeForGimp":
                     windowspython_nossl()
                 else:
                     with urlopen(url, timeout=timeout) as response:
-                        show_debugging_data(f"Data arrived from {url}")
+                        logging.debug(f"Data arrived from {url}")
                         if only_read:
                             self.response_data = response.read()
                         else:
@@ -400,7 +431,7 @@ class AiHordeClient:
                                 response.read().decode("utf-8")
                             )
             except Exception as ex:
-                show_debugging_data(ex)
+                log_exception(ex)
                 self.timeout = ex
 
             self.finished_task = True
@@ -410,7 +441,7 @@ class AiHordeClient:
             initial = now
             for i in range(0, until):
                 if self.finished_task:
-                    show_debugging_data(f"{url} took {now - initial}")
+                    logging.debug(f"{url} took {now - initial}")
                     break
                 await asyncio.sleep(refresh_each)
                 now = time.perf_counter()
@@ -420,7 +451,7 @@ class AiHordeClient:
             the_counter = asyncio.create_task(counter(int(timeout / refresh_each)))
             await asyncio.to_thread(real_url_open)
             await the_counter
-            show_debugging_data("finished request")
+            logging.debug("finished request")
 
         async def local_to_thread(func, /, *args, **kwargs):
             """
@@ -460,7 +491,7 @@ class AiHordeClient:
                     windowspython_nossl()
                 else:
                     with urlopen(url, timeout=timeout) as response:
-                        show_debugging_data(f"Data arrived from {url}")
+                        logging.debug(f"Data arrived from {url}")
                         if only_read:
                             self.response_data = response.read()
                         else:
@@ -468,7 +499,7 @@ class AiHordeClient:
                                 response.read().decode("utf-8")
                             )
             except Exception as ex:
-                show_debugging_data(ex)
+                log_exception(ex)
                 self.timeout = ex
             self.finished_task = True
 
@@ -505,7 +536,7 @@ class AiHordeClient:
         if "local_settings" not in self.settings:
             return
 
-        show_debugging_data("Getting requirements for models")
+        logging.debug("Getting requirements for models")
         url = self.MODEL_REQUIREMENTS_URL
         self.progress_text = _("Updating model requirements...")
         self.__url_open__(url)
@@ -541,13 +572,13 @@ class AiHordeClient:
                 else:
                     req_info[model][name] = range_vals
 
-        show_debugging_data(f"We have requirements for {len(req_info)} models")
+        logging.debug(f"We have requirements for {len(req_info)} models")
 
         if "requirements" not in self.settings["local_settings"]:
-            show_debugging_data("Creating requirements in local_settings")
+            logging.debug("Creating requirements in local_settings")
             self.settings["local_settings"]["requirements"] = req_info
         else:
-            show_debugging_data("Updating requirements in local_settings")
+            logging.debug("Updating requirements in local_settings")
             self.settings["local_settings"]["requirements"].update(req_info)
 
     def __get_model_requirements__(self, model: str) -> json:
@@ -571,7 +602,7 @@ class AiHordeClient:
         """
         reqs = {}
         if not self.settings or "local_settings" not in self.settings:
-            show_debugging_data("Too brand new... ")
+            logging.debug("Too brand new... ")
             self.settings["local_settings"] = {}
         if "requirements" not in self.settings["local_settings"]:
             text_doing = self.progress_text
@@ -581,7 +612,7 @@ class AiHordeClient:
         settings = self.settings["local_settings"]["requirements"].get(model, {})
 
         if not settings:
-            show_debugging_data(f"No requirements for {model}")
+            logging.debug(f"No requirements for {model}")
             return reqs
 
         for key, val in settings.items():
@@ -598,7 +629,7 @@ class AiHordeClient:
             else:
                 reqs[key] = val
 
-        show_debugging_data(f"Requirements for { model } are { reqs }")
+        logging.debug(f"Requirements for { model } are { reqs }")
         return reqs
 
     def __get_model_restrictions__(self, model: str) -> json:
@@ -632,10 +663,10 @@ class AiHordeClient:
             today - date(*[int(i) for i in previous_update.split("-")])
         ).days
         if days_updated < AiHordeClient.MAX_DAYS_MODEL_UPDATE:
-            show_debugging_data(f"No need to update models {previous_update}")
+            logging.debug(f"No need to update models {previous_update}")
             return
 
-        show_debugging_data("time to update models")
+        logging.debug("time to update models")
         locals = self.settings.get("local_settings", {"models": MODELS})
         locals["date_refreshed_models"] = today.strftime("%Y-%m-%d")
 
@@ -648,7 +679,7 @@ class AiHordeClient:
             self.__url_open__(url)
             del self.headers["X-Fields"]
         except TimeoutError:
-            show_debugging_data("Failed updating models due to timeout")
+            logging.debug("Failed updating models due to timeout")
             return
         except (HTTPError, URLError):
             message = _(
@@ -663,7 +694,7 @@ class AiHordeClient:
             key=lambda c: c[1],
             reverse=True,
         )
-        show_debugging_data(f"Downloaded {len(popular_models)}")
+        logging.debug(f"Downloaded {len(popular_models)}")
         if self.settings.get("mode", "") == "MODE_INPAINTING":
             popular_models = [
                 (key, val)
@@ -686,7 +717,7 @@ class AiHordeClient:
             compare = set(fetched_models)
             new_models = compare.difference(locals.get("models", default_models))
             if new_models:
-                show_debugging_data(f"New models {len(new_models)}")
+                logging.debug(f"New models {len(new_models)}")
                 locals["models"] = sorted(fetched_models, key=lambda c: c.upper())
                 size_models = len(new_models)
                 if size_models == 1:
@@ -715,7 +746,7 @@ class AiHordeClient:
 
         if self.settings["model"] not in locals["models"]:
             self.settings["model"] = locals["models"][0]
-        show_debugging_data(self.settings["local_settings"])
+        logging.debug(self.settings["local_settings"])
 
     def refresh_styles(self):
         """
@@ -731,21 +762,15 @@ class AiHordeClient:
         Inform the user regarding a plugin update. Returns "" if the
         installed is the latest one. Else the localized message,
         defaulting to english if there is no locale for the message.
-
-        Uses PROPERTY_CURRENT_SESSION as the name of the property for
-        checking only during this session.
         """
         message = ""
-        already_asked = self.informer.get_frontend_property(
-            self.current_local_session_key
-        )
 
-        if already_asked:
-            show_debugging_data(
-                "We already checked for a new version during this session"
+        if self.informer.has_asked_for_update():
+            logging.debug(
+                "We already checked for a new version during this session",
             )
             return ""
-        show_debugging_data("Checking for update")
+        logging.debug("Checking for update")
 
         try:
             # Check for updates by fetching version information from a URL
@@ -753,8 +778,8 @@ class AiHordeClient:
             self.__url_open__(url, 15)
             data = self.response_data
 
-            # During this session we will not check for update
-            self.informer.set_frontend_property(self.current_local_session_key, True)
+            # During this session we will not check for update again
+            self.informer.just_asked_for_update()
             local_version = (*(int(i) for i in str(self.client_version).split(".")),)
             if isinstance(data["version"], int):
                 # incoming_version has a deprecated format, local is newer
@@ -783,7 +808,7 @@ class AiHordeClient:
         try:
             self.__url_open__(request, 15)
             data = self.response_data
-            show_debugging_data(data)
+            logging.debug(data)
         except HTTPError as ex:
             raise (ex)
 
@@ -884,7 +909,7 @@ class AiHordeClient:
             if "source_image" in dt:
                 del dt["source_image"]
                 dt["source_image_size"] = len(data_to_send["source_image"])
-            show_debugging_data(dt)
+            logging.debug(dt)
 
             post_data = json.dumps(data_to_send).encode("utf-8")
 
@@ -896,11 +921,11 @@ class AiHordeClient:
                 self.__inform_progress__()
                 self.__url_open__(request, 15)
                 data = self.response_data
-                show_debugging_data(data)
+                logging.debug(data)
                 if "warnings" in data:
                     self.warnings = data["warnings"]
                 text = _("Horde Contacted")
-                show_debugging_data(text + f" {self.check_counter} { self.progress }")
+                logging.debug(text + f" {self.check_counter} { self.progress }")
                 self.progress_text = text
                 self.__inform_progress__()
                 self.id = data["id"]
@@ -908,7 +933,7 @@ class AiHordeClient:
                 message = _(
                     "When trying to ask for the image, the Horde was too slow, try again later"
                 )
-                show_debugging_data(ex)
+                log_exception(ex)
                 raise IdentifiedError(message)
             except HTTPError as ex:
                 try:
@@ -930,22 +955,24 @@ class AiHordeClient:
                                 + f" { message }."
                             )
                 except Exception as ex2:
-                    show_debugging_data(ex2, "No way to recover error msg")
+                    log_exception(ex2)
                     message = str(ex)
-                show_debugging_data(message, data)
+                logging.debug(message, data)
                 if self.api_key == ANONYMOUS and REGISTER_AI_HORDE_URL in message:
                     self.informer.show_error(f"{ message }", url=REGISTER_AI_HORDE_URL)
                 else:
                     self.informer.show_error(f"{ message }")
                 return ""
             except URLError as ex:
-                show_debugging_data(ex, data)
+                log_exception(ex)
+                if data:
+                    logging.debug(data)
                 self.informer.show_error(
                     _("Internet required, chek your connection: ") + f"'{ ex }'."
                 )
                 return ""
             except Exception as ex:
-                show_debugging_data(ex)
+                log_exception(ex)
                 self.informer.show_error(str(ex))
                 return ""
 
@@ -960,7 +987,7 @@ class AiHordeClient:
                 self.informer.show_error(str(ex))
             return ""
         except Exception as ex:
-            show_debugging_data(ex)
+            log_exception(ex)
             self.informer.show_error(_("Service failed with: ") + f"'{ ex }'.")
             return ""
         finally:
@@ -978,8 +1005,8 @@ class AiHordeClient:
         """
         progress = 100 - (int(self.max_time - datetime.now().timestamp()) * self.factor)
 
-        show_debugging_data(
-            f'[{progress:.2f}/{self.settings["max_wait_minutes"] * 60}] {self.progress_text}'
+        logging.debug(
+            f'[{progress:.2f}/{self.settings["max_wait_minutes"] * 60}] {self.progress_text}',
         )
 
         if self.informer and progress != self.progress:
@@ -1007,7 +1034,7 @@ class AiHordeClient:
         self.__url_open__(url)
         data = self.response_data
 
-        show_debugging_data(data)
+        logging.debug(data)
 
         self.check_counter = self.check_counter + 1
 
@@ -1021,10 +1048,10 @@ class AiHordeClient:
                 text = _("You are first in the queue")
             else:
                 text = _("Queue position: ") + str(data["queue_position"])
-            show_debugging_data(f"Wait time {data['wait_time']}")
+            logging.debug(f"Wait time {data['wait_time']}")
         elif data["processing"] > 0:
             text = _("Generating...")
-            show_debugging_data(text + f" {self.check_counter} { self.progress }")
+            logging.debug(text + f" {self.check_counter} { self.progress }")
         self.progress_text = text
 
         if self.check_counter < self.check_max:
@@ -1033,12 +1060,12 @@ class AiHordeClient:
                 and data["wait_time"] + datetime.now().timestamp() > self.max_time
             ):
                 # If we are in queue, we will not be served in time
-                show_debugging_data(data)
+                logging.debug(data)
                 status_url = f"{ API_ROOT }generate/status/{ self.id }"
                 self.informer.set_generated_image_url_status(
                     status_url, data["wait_time"]
                 )
-                show_debugging_data(self.informer.get_generated_image_url_status())
+                logging.debug(self.informer.get_generated_image_url_status())
                 if self.api_key == ANONYMOUS:
                     message = (
                         _("Get a free API Key at ")
@@ -1071,7 +1098,7 @@ class AiHordeClient:
                 self.__check_if_ready__()
                 return False
             else:
-                show_debugging_data(data)
+                logging.debug(data)
                 raise IdentifiedError(
                     _(
                         "There are no workers available with these settings. Please try again later."
@@ -1089,7 +1116,7 @@ class AiHordeClient:
                 raise IdentifiedError(message, url=REGISTER_AI_HORDE_URL)
             else:
                 minutes = (self.check_max * AiHordeClient.CHECK_WAIT) / 60
-                show_debugging_data(data)
+                logging.debug(data)
                 if minutes == 1:
                     raise IdentifiedError(
                         _("Probably your image will take one additional minute.")
@@ -1116,7 +1143,7 @@ class AiHordeClient:
         self.__inform_progress__()
         self.__url_open__(url)
         data = self.response_data
-        show_debugging_data(data)
+        logging.debug(data)
 
         return data["generations"]
 
@@ -1126,7 +1153,7 @@ class AiHordeClient:
         downloaded images.
         """
         self.stage = "Downloading images"
-        show_debugging_data("Start to download generated images")
+        logging.debug("Start to download generated images")
         generated_filenames = []
         cont = 1
         nimages = len(images)
@@ -1138,12 +1165,12 @@ class AiHordeClient:
                     message = f'«{ self.settings["prompt"] }»' + _(
                         " is censored, try changing the prompt wording"
                     )
-                    show_debugging_data(message)
+                    logging.debug(message)
                     self.informer.show_error(message, title="warning")
                     self.censored = True
                     break
                 if image["img"].startswith("https"):
-                    show_debugging_data(f"Downloading { image['img'] }")
+                    logging.debug(f"Downloading { image['img'] }")
                     if nimages == 1:
                         self.progress_text = _("Downloading result...")
                     else:
@@ -1154,10 +1181,10 @@ class AiHordeClient:
                     self.__url_open__(image["img"], only_read=True)
                     bytes = self.response_data
                 else:
-                    show_debugging_data(f"Storing embebed image { cont }")
+                    logging.debug(f"Storing embebed image { cont }")
                     bytes = base64.b64decode(image["img"])
 
-                show_debugging_data(f"Dumping to { generated_file.name }")
+                logging.debug(f"Dumping to { generated_file.name }")
                 generated_file.write(bytes)
                 generated_filenames.append(generated_file.name)
                 cont += 1
@@ -1169,7 +1196,7 @@ class AiHordeClient:
                 + ":\n * "
                 + "\n * ".join([i["message"] for i in self.warnings])
             )
-            show_debugging_data(self.warnings)
+            logging.debug(self.warnings)
             self.informer.show_error(message, title="warning")
             self.warnings = []
         self.refresh_models()
@@ -1291,7 +1318,7 @@ class ProcedureInformation:
 
         the choices are updated if the structure is present and there are options present
         """
-        show_debugging_data(f"fetching choices from {self.cache_key}")
+        logging.debug(f"fetching choices from {self.cache_key}")
         if self.cache_key not in choices or not choices[self.cache_key]["models"]:
             return
         self.model_choices = choices[self.cache_key]["models"]
@@ -1304,7 +1331,7 @@ class ProcedureInformation:
         """
         if not new_choices:
             return
-        show_debugging_data("storing choices")
+        logging.debug("storing choices")
         current_choices = st_manager.load()
         if "api_key" in current_choices:
             del current_choices["api_key"]
@@ -1318,5 +1345,5 @@ class ProcedureInformation:
             else:
                 current_choices["requirements"] = new_choices["requirements"]
 
-        show_debugging_data(current_choices)
+        logging.debug(current_choices)
         st_manager.save(current_choices)
