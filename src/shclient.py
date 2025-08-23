@@ -979,7 +979,7 @@ class AiHordeClient:
         progress = 100 - (int(self.max_time - datetime.now().timestamp()) * self.factor)
 
         show_debugging_data(
-            f"[{progress:.2f}/{self.settings["max_wait_minutes"] * 60}] {self.progress_text}"
+            f'[{progress:.2f}/{self.settings["max_wait_minutes"] * 60}] {self.progress_text}'
         )
 
         if self.informer and progress != self.progress:
@@ -1270,7 +1270,7 @@ class HordeClientSettings:
 class ProcedureInformation:
     def __init__(
         self,
-        model_choices: list[str],
+        model_choices: List[str],
         action: str,
         cache_key: str,
         default_model: str,
