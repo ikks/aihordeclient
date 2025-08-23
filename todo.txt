@@ -1,0 +1,6 @@
+# * [ ] use uv to package
+# * [ ] Add versioning
+# * [ ] Create submodule
+# * [ ] Fix localization
+# * [ ] Integrate with gimp plugin
+# * [ ] Integrate with libreoffice plugin

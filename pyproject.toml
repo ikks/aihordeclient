@@ -1,0 +1,7 @@
+[project]
+name = "aihordeclient"
+version = "0.1.0"
+description = "AI Horde client to ease creation of plugins"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
