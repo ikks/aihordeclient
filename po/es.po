@@ -1,0 +1,192 @@
+# Spanish translations for PACKAGE package
+# Traducciones al español para el paquete PACKAGE.
+# Copyright (C) 2025 THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Igor Támara <igor.tamara@gmail.com>, 2025.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-08-23 20:01-0500\n"
+"PO-Revision-Date: 2025-07-24 19:01-0500\n"
+"Last-Translator: Igor Támara <igor.tamara@gmail.com>\n"
+"Language-Team: Spanish <es@tp.org.es>\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 3.6\n"
+
+#: __init__.py:288
+msgid ""
+"Please visit\n"
+"  {}\n"
+"at around {} to fetch your generated images"
+msgstr ""
+"Por favor visite\n"
+"  {}\n"
+"hacia las {} para obtener las imágenes generadas"
+
+#: __init__.py:373
+msgid "Starting..."
+msgstr "Comenzando..."
+
+#: __init__.py:541
+msgid "Updating model requirements..."
+msgstr "Actualizando requerimientos de modelos..."
+
+#: __init__.py:676
+msgid "Updating Models..."
+msgstr "Actualizando modelos..."
+
+#: __init__.py:686
+msgid "Service failed to get latest models, check your Internet connection"
+msgstr ""
+"El servicio falló al actualizar los modelos más recientes, revise su "
+"conexión a Internet"
+
+#: __init__.py:725
+msgid "We have a new model:"
+msgstr "Tenemos un nuevo modelo:"
+
+#: __init__.py:730
+msgid "We have {} new models, including:"
+msgstr "Tenemos {} modelos nuevos, incluyendo:"
+
+#: __init__.py:736
+msgid "We have {} new models:"
+msgstr "Tenemos {} modelos nuevos:"
+
+#: __init__.py:794
+msgid "Failed to check for most recent version, check your Internet connection"
+msgstr ""
+"Fallo al revisar la versión más reciente, revise su conexión a Internet"
+
+#: __init__.py:805
+msgid "Register at "
+msgstr "Regístrese en "
+
+#: __init__.py:849
+msgid "Contacting the Horde..."
+msgstr "Contactando la Horda..."
+
+#: __init__.py:927
+msgid "Horde Contacted"
+msgstr "Horda contactada"
+
+#: __init__.py:934
+msgid ""
+"When trying to ask for the image, the Horde was too slow, try again later"
+msgstr ""
+"Cuando se solicitó generar la imagen, la Horda fue muy lenta, intente de "
+"nuevo más tarde"
+
+#: __init__.py:954
+msgid "to learn to earn kudos. Detail:"
+msgstr "para aprender a ganar kudos. Detalle:"
+
+#: __init__.py:971
+msgid "Internet required, chek your connection: "
+msgstr "Se requiere Internet, verifique su conexión: "
+
+#: __init__.py:991
+msgid "Service failed with: "
+msgstr "El servicio falló con: "
+
+#: __init__.py:1042
+msgid "Downloading generated image..."
+msgstr "Descargando imagen generada..."
+
+#: __init__.py:1048
+msgid "You are first in the queue"
+msgstr "Es el primero en turno"
+
+#: __init__.py:1050
+msgid "Queue position: "
+msgstr "En turno: "
+
+#: __init__.py:1053
+msgid "Generating..."
+msgstr "Generando..."
+
+#: __init__.py:1071
+msgid "Get a free API Key at "
+msgstr "Obtenga una llave de API gratuita en "
+
+#: __init__.py:1074 __init__.py:1113
+msgid ""
+".\n"
+" This model takes more time than your current configuration."
+msgstr ""
+".\n"
+" Este modelo toma más tiempo que el configurado actualmente."
+
+#: __init__.py:1080
+msgid "Please try another model,"
+msgstr "Por favor intente con otro modelo,"
+
+#: __init__.py:1081
+msgid "{} would take more time than you configured,"
+msgstr "{} tomaría más tiempo que el configurado actualmente."
+
+#: __init__.py:1084
+msgid " or try again later."
+msgstr " o intente más tarde."
+
+#: __init__.py:1104
+msgid ""
+"There are no workers available with these settings. Please try again later."
+msgstr ""
+"No hay trabajadores disponibles para las opciones elegidas. Por favor "
+"intente más tarde."
+
+#: __init__.py:1110
+msgid "Get an Api key for free at "
+msgstr "Obtenga una Api key gratuita en "
+
+#: __init__.py:1122
+msgid "Probably your image will take one additional minute."
+msgstr "Probablemente su imagen va a tomar un minuto adicional."
+
+#: __init__.py:1124 __init__.py:1131
+msgid "Please try again later."
+msgstr "Por favor intente más tarde."
+
+#: __init__.py:1129
+msgid "Probably your image will take {} additional minutes."
+msgstr "Probablemente su imagen va a tomar {} minutos adicionales."
+
+#: __init__.py:1142
+msgid "Fetching images..."
+msgstr "Descargando imágenes..."
+
+#: __init__.py:1166
+msgid " is censored, try changing the prompt wording"
+msgstr " está censurada, intente cambiar palabras en el prompt"
+
+#: __init__.py:1175
+msgid "Downloading result..."
+msgstr "Descargando resultado..."
+
+#: __init__.py:1178
+msgid "Downloading image"
+msgstr "Descargando imagen"
+
+#: __init__.py:1194
+msgid ""
+"You may need to reduce your settings or choose another model, or you may "
+"have been censored. Horde message"
+msgstr ""
+"Tal vez requiera elegir una configuración más baja o elegir otro modelo, o "
+"puede haber sido censurado. El mensaje de Horde es:"
+
+#: __init__.py:1219 __init__.py:1231
+msgid " generated by "
+msgstr " generada por "
+
+#: __init__.py:1229
+msgid " with "
+msgstr " con "
+
