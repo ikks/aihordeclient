@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# Gimp3 plugin for AiHorde
+# Basic client for AiHorde
 # Authors:
 #  * blueturtleai <https://github.com/blueturtleai> Original Code
 #  * Igor Támara <https://github.com/ikks>
@@ -55,11 +55,6 @@ Minimum wait time to check if the image has been generated in seconds
 MAX_TIME_REFRESH = 15
 """
 Checking for an image generation will be at most in seconds
-"""
-
-ANONYMOUS = "0000000000"
-"""
-api_key for anonymous users
 """
 
 DEFAULT_MODEL = "stable_diffusion"
@@ -346,14 +341,17 @@ class AiHordeClient:
     ):
         """
         Creates a AI Horde client with the settings, if None, the API_KEY is
-        set to ANONYMOUS, the name to identify the client to AI Horde and
+        set to ANONYMOUS_KEY, the name to identify the client to AI Horde and
         a reference of an obect that allows the client to send messages to the
         user.
         """
         if settings is None:
-            self.settings = {"api_key": ANONYMOUS}
+            self.settings = {"api_key": ANONYMOUS_KEY}
         else:
             self.settings: json = settings
+
+        if "max_wait_minutes" not in self.settings:
+            self.settings["max_wait_minutes"] = 1
 
         self.client_version: str = client_version
         self.url_version_update: str = url_version_update
@@ -376,6 +374,10 @@ class AiHordeClient:
         # Sync informer and async request
         self.finished_task: bool = True
         self.censored: bool = False
+        self.max_time = datetime.now().timestamp() + (
+            60 * self.settings["max_wait_minutes"]
+        )
+        self.factor = 5 / (3.0 * settings["max_wait_minutes"])
         dt = self.headers.copy()
         del dt["apikey"]
         # Beware, not logging the api_key
@@ -801,7 +803,7 @@ class AiHordeClient:
         returns the balance for the account. If happens to be an
         anonymous account, invites to register
         """
-        if self.api_key == ANONYMOUS:
+        if self.api_key == ANONYMOUS_KEY:
             return _("Register at ") + REGISTER_AI_HORDE_URL
         url = API_ROOT + "find_user"
         request = Request(url, headers=self.headers)
@@ -941,7 +943,7 @@ class AiHordeClient:
                     data = json.loads(data)
                     message = data.get("message", str(ex))
                     if data.get("rc", "") == "KudosUpfront":
-                        if self.api_key == ANONYMOUS:
+                        if self.api_key == ANONYMOUS_KEY:
                             message = (
                                 _(
                                     f"Register at { REGISTER_AI_HORDE_URL  } and use your key to improve your rate success. Detail:"
@@ -958,7 +960,7 @@ class AiHordeClient:
                     log_exception(ex2)
                     message = str(ex)
                 logging.debug(message, data)
-                if self.api_key == ANONYMOUS and REGISTER_AI_HORDE_URL in message:
+                if self.api_key == ANONYMOUS_KEY and REGISTER_AI_HORDE_URL in message:
                     self.informer.show_error(f"{ message }", url=REGISTER_AI_HORDE_URL)
                 else:
                     self.informer.show_error(f"{ message }")
@@ -1066,7 +1068,7 @@ class AiHordeClient:
                     status_url, data["wait_time"]
                 )
                 logging.debug(self.informer.get_generated_image_url_status())
-                if self.api_key == ANONYMOUS:
+                if self.api_key == ANONYMOUS_KEY:
                     message = (
                         _("Get a free API Key at ")
                         + REGISTER_AI_HORDE_URL
@@ -1105,7 +1107,7 @@ class AiHordeClient:
                     )
                 )
         else:
-            if self.api_key == ANONYMOUS:
+            if self.api_key == ANONYMOUS_KEY:
                 message = (
                     _("Get an Api key for free at ")
                     + REGISTER_AI_HORDE_URL
@@ -1284,7 +1286,7 @@ class HordeClientSettings:
 
     def load(self) -> json:
         if not os.path.exists(self.file):
-            return {"api_key": ANONYMOUS}
+            return {"api_key": ANONYMOUS_KEY}
         with open(self.file) as myfile:
             return json.loads(myfile.read())
 
