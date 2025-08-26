@@ -1,6 +1,9 @@
-# * [ ] use uv to package
-# * [ ] Add versioning
-# * [ ] Create submodule
-# * [ ] Fix localization
-# * [ ] Integrate with gimp plugin
-# * [ ] Integrate with libreoffice plugin
+# * [X] use uv to package
+# * [X] Add versioning
+# * [X] Create submodule
+# * [X] Fix localization : Gimp plugin leads this, copy to LibreOffice plugin
+# * [ ] Add samples
+# * [ ] Improve documentation showing samples and adding CONTRIBUTING
+# * [ ] Testing query the balance with a new api_key
+# * [X] Integrate with gimp plugin
+# * [X] Integrate with libreoffice plugin
