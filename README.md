@@ -5,33 +5,27 @@ ease plugin development.
 
 ## USAGE
 
+Look at [https://github.com/ikks/aihordeclient/blob/main/main.py](main.py) for the simplest sample, for other real
+use cases:
+
 * See [stablehorde-gimp3](https://github.com/ikks/gimp-stable-diffusion/)
 * See [libreoffice-stable-horde](https://github.com/ikks/libreoffice-stable-diffusion/)
 
-## DEVELOPING
+Get an AIHORDE [free api_key](https://aihorde.net/register) to run
+the sample code, once you have installed the package.
 
-Install [uv](https://docs.astral.sh/uv/)
-
-To make a simple compatibility test for python3.8 run:
-
+```sh
+git clone https://github.com/ikks/aihordeclient/
+cd aihordeclient
+uv venv -p 3.13
+source .venv/bin/activate
+AIHORDE_API_KEY=<yourapikey> python main.py
 ```
-uv run src/aihordeclient.py
-```
-
-We avoid to have external dependencies far from python standard libraries,
-which are huge.
-
-```
-uv build
-```
-
-More [uv instructions](https://docs.astral.sh/uv/guides/projects/#running-commands)
-
 
 # AUTHORS
 
 Most of the code descends from
-[AITurtle Gimp 2.10.X plugin](https://github.com/blueturtleai/gimp-stable-diffusion)
+[blueturtleai Gimp 2.10.X plugin](https://github.com/blueturtleai/gimp-stable-diffusion)
 initial work.
 
 # THANKS
