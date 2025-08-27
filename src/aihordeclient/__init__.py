@@ -132,6 +132,9 @@ Default Gimp Client.  Was the first to use this client
 
 
 def log_exception(information):
+    """
+    Logs an exception including line number
+    """
     dnow = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ln = information.__traceback__.tb_lineno
     logging.error(f"[{ dnow }]{ln}: { str(information) }")
@@ -340,11 +343,13 @@ class AiHordeClient:
         informer: InformerFrontend = None,
     ):
         """
-        Creates a AI Horde client with the settings, if None, the API_KEY is
+        Creates an AI Horde client with the given settings, if None, the API_KEY is
         set to ANONYMOUS_KEY, the name to identify the client to AI Horde and
-        a reference of an obect that allows the client to send messages to the
+        a reference of an object that allows the client to send messages to the
         user.
         """
+        if informer is None or not isinstance(informer, InformerFrontend):
+            raise IdentifiedError("You must instatiate an informer")
         if settings is None:
             self.settings = {"api_key": ANONYMOUS_KEY}
         else:
@@ -354,6 +359,12 @@ class AiHordeClient:
             self.settings["max_wait_minutes"] = 1
 
         self.client_version: str = client_version
+
+        # When the async request is succesfull, we store the status_url to download
+        # later if there is a problem
+        self.status_url: str = ""
+        self.wait_time: int = 1000
+
         self.url_version_update: str = url_version_update
         self.client_help_url: str = client_help_url
         self.client_download_url: str = client_download_url
@@ -419,13 +430,19 @@ class AiHordeClient:
                     self.response_data = json.loads(response.read().decode("utf-8"))
 
         def real_url_open():
-            logging.debug(f"starting request {url}")
+            if isinstance(url, Request):
+                logging.debug(f"starting request {url.full_url}")
+            else:
+                logging.debug(f"starting request {url}")
             try:
                 if os.name == "nt" and self.client_name == "AiHordeForGimp":
                     windowspython_nossl()
                 else:
                     with urlopen(url, timeout=timeout) as response:
-                        logging.debug(f"Data arrived from {url}")
+                        if isinstance(url, Request):
+                            logging.debug(f"Data arrived from {url.full_url}")
+                        else:
+                            logging.debug(f"Data arrived from {url}")
                         if only_read:
                             self.response_data = response.read()
                         else:
@@ -443,7 +460,10 @@ class AiHordeClient:
             initial = now
             for i in range(0, until):
                 if self.finished_task:
-                    logging.debug(f"{url} took {now - initial}")
+                    if isinstance(url, Request):
+                        logging.debug(f"{url.full_url} took {now - initial}")
+                    else:
+                        logging.debug(f"{url} took {now - initial}")
                     break
                 await asyncio.sleep(refresh_each)
                 now = time.perf_counter()
@@ -652,8 +672,11 @@ class AiHordeClient:
 
     def refresh_models(self):
         """
-        Refreshes the model list with the 50 more used including always stable_diffusion
-        we update self.settings to store the date when the models were refreshed.
+        Refreshes the model list with the MAX_MODELS_LIST more used including
+        always stable_diffusion if not specified, we update self.settings to
+        store the date when the models were refreshed.
+
+        Informs if there are new models.
         """
         default_models = MODELS
         self.staging = "Refresh models"
@@ -672,7 +695,7 @@ class AiHordeClient:
         locals = self.settings.get("local_settings", {"models": MODELS})
         locals["date_refreshed_models"] = today.strftime("%Y-%m-%d")
 
-        url = API_ROOT + "/stats/img/models?model_state=known"
+        url = API_ROOT + "stats/img/models?model_state=known"
         self.headers["X-Fields"] = "month"
 
         self.progress_text = _("Updating Models...")
@@ -745,19 +768,10 @@ class AiHordeClient:
         self.settings["local_settings"] = locals
 
         self.__update_models_requirements__()
-
-        if self.settings["model"] not in locals["models"]:
-            self.settings["model"] = locals["models"][0]
+        if "model" in self.settings:
+            if self.settings["model"] not in locals["models"]:
+                self.settings["model"] = locals["models"][0]
         logging.debug(self.settings["local_settings"])
-
-    def refresh_styles(self):
-        """
-        Refreshes the style list
-        """
-        # Fetch first 50 more used styles
-        # We store the name of the styles and the date the last request was done
-        # We fetch the style list if it haven't been updated during 5 days
-        pass
 
     def check_update(self) -> str:
         """
@@ -799,7 +813,7 @@ class AiHordeClient:
 
     def get_balance(self) -> str:
         """
-        Given an AI Horde token, present in the attribute api_key,
+        Given an AI Horde token, present in the api_key,
         returns the balance for the account. If happens to be an
         anonymous account, invites to register
         """
@@ -825,12 +839,18 @@ class AiHordeClient:
         1. Invokes endpoint to launch a work for image generation
         2. Reviews the status of the work
         3. Waits until the max_wait_minutes for the generation of
-        the image
+        the image passes or the image is generated
         4. Retrieves the resulting images and returns the local path of
         the downloaded images
 
         When no success, returns [].  raises exceptions, but tries to
-        offer helpful messages
+        offer helpful messages.
+
+        Also checks for update of the plugin.
+
+        Downloads the most popular models and reviews the requirements
+        to adjust the configuration to avoid warnings of misconfigurations
+        outside the requirements.
         """
         images_names = []
         self.stage = "Nothing"
@@ -931,6 +951,8 @@ class AiHordeClient:
                 self.progress_text = text
                 self.__inform_progress__()
                 self.id = data["id"]
+                self.status_url = f"{ API_ROOT }generate/status/{ self.id }"
+                self.wait_time = data.get("wait_time", self.wait_time)
             except TimeoutError as ex:
                 message = _(
                     "When trying to ask for the image, the Horde was too slow, try again later"
@@ -979,8 +1001,10 @@ class AiHordeClient:
                 return ""
 
             self.__check_if_ready__()
+            self.wait_time = 0
             images = self.__get_images__()
             images_names = self.__get_images_filenames__(images)
+            self.status_url = ""
 
         except IdentifiedError as ex:
             if ex.url:
@@ -1063,9 +1087,8 @@ class AiHordeClient:
             ):
                 # If we are in queue, we will not be served in time
                 logging.debug(data)
-                status_url = f"{ API_ROOT }generate/status/{ self.id }"
                 self.informer.set_generated_image_url_status(
-                    status_url, data["wait_time"]
+                    self.status_url, data["wait_time"]
                 )
                 logging.debug(self.informer.get_generated_image_url_status())
                 if self.api_key == ANONYMOUS_KEY:
@@ -1085,7 +1108,7 @@ class AiHordeClient:
                         )
                         + _(" or try again later.")
                     )
-                    raise IdentifiedError(message, url=status_url)
+                    raise IdentifiedError(message, url=self.status_url)
 
             if data["is_possible"] is True:
                 # We still have time to wait, given that the status is processing, we
@@ -1136,6 +1159,7 @@ class AiHordeClient:
 
     def __get_images__(self):
         """
+        Returns the image information of a generated image.
         At this stage AI horde has generated the images and it's time
         to download them all.
         """
@@ -1146,6 +1170,17 @@ class AiHordeClient:
         self.__url_open__(url)
         data = self.response_data
         logging.debug(data)
+        if len(data["generations"]) == 0:
+            return []
+        if data["generations"][0]["censored"]:
+            image = data["generations"][0]
+            message = f'«{ self.settings["prompt"] }»' + _(
+                " is censored, try changing the prompt wording"
+            )
+            logging.error(message)
+            logging.error(image["gen_metadata"])
+            self.informer.show_error(message, title="warning")
+            self.censored = True
 
         return data["generations"]
 
@@ -1163,14 +1198,6 @@ class AiHordeClient:
             with tempfile.NamedTemporaryFile(
                 "wb+", delete=False, suffix=".webp"
             ) as generated_file:
-                if image["censored"]:
-                    message = f'«{ self.settings["prompt"] }»' + _(
-                        " is censored, try changing the prompt wording"
-                    )
-                    logging.debug(message)
-                    self.informer.show_error(message, title="warning")
-                    self.censored = True
-                    break
                 if image["img"].startswith("https"):
                     logging.debug(f"Downloading { image['img'] }")
                     if nimages == 1:
@@ -1206,7 +1233,8 @@ class AiHordeClient:
 
     def get_imagename(self) -> str:
         """
-        Returns a name for the image, intended to be used as identifier
+        Returns a name and the model for the image, intended to be used as identifier
+        To be run after a succesful generation
         """
         if "prompt" not in self.settings:
             return "AIHorde will be invoked and this image will appear"
@@ -1214,6 +1242,7 @@ class AiHordeClient:
 
     def get_title(self) -> str:
         """
+        Returns the prompt and model used and attribution to AIHorde
         Intended to be used as the title to offer the user some information
         """
         if "prompt" not in self.settings:
@@ -1222,7 +1251,7 @@ class AiHordeClient:
 
     def get_tooltip(self) -> str:
         """
-        Intended for assistive technologies
+        Intended for assistive technologies, returns prompt and model used
         """
         if "prompt" not in self.settings:
             return "AIHorde will be invoked and this image will appear"
@@ -1236,7 +1265,8 @@ class AiHordeClient:
 
     def get_full_description(self) -> str:
         """
-        Intended for reproducibility
+        Returns the options used for image_generation
+        Useful for reproducibility. Intended to be run after a succesful generation
         """
         if "prompt" not in self.settings:
             return "AIhorde shall be working sometime in the future"
@@ -1265,7 +1295,7 @@ class AiHordeClient:
 
     def set_settings(self, settings: json):
         """
-        Sets the settings, useful when fetching from a file or updating
+        Store the given settings, useful when fetching from a file or updating
         based on user selection.
         """
         self.settings = settings
