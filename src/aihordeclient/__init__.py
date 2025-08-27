@@ -125,6 +125,11 @@ INPAINT_MODELS = [
 Initial list of inpainting models, new ones are downloaded from AiHorde API
 """
 
+MESSAGE_PROCESS_INTERRUPTED = "Process interrupted"
+"""
+Allows to identify when the client received a cancellation
+"""
+
 __HORDE_CLIENT_NAME__ = "AiHordeForGimp"
 """
 Default Gimp Client.  Was the first to use this client
@@ -394,6 +399,9 @@ class AiHordeClient:
         # Beware, not logging the api_key
         logging.debug(dt)
 
+        self._should_stop = False
+        self.process_interrupted = False
+
     def __url_open__(
         self,
         url: Union[str, Request],
@@ -459,6 +467,10 @@ class AiHordeClient:
             now = time.perf_counter()
             initial = now
             for i in range(0, until):
+                if self._should_stop:
+                    self.process_interrupted = True
+                    logging.debug("Interrupted")
+                    break
                 if self.finished_task:
                     if isinstance(url, Request):
                         logging.debug(f"{url.full_url} took {now - initial}")
@@ -477,7 +489,7 @@ class AiHordeClient:
 
         async def local_to_thread(func, /, *args, **kwargs):
             """
-            python3.8 version do not have to_thread
+            python3.8 version does not have to_thread
             https://stackoverflow.com/a/69165563/107107
             """
             loop = asyncio.get_running_loop()
@@ -490,10 +502,13 @@ class AiHordeClient:
             Auxiliary function to add support for python3.8 missing
             asyncio.to_thread
             """
-            task = asyncio.create_task(counter(30))
+            task = asyncio.create_task(counter(int(timeout / refresh_each)))
             await local_to_thread(real_url_open)
             self.finished_task = True
             await task
+
+        if self.process_interrupted:
+            raise IdentifiedError(MESSAGE_PROCESS_INTERRUPTED)
 
         self.finished_task = False
         running_python_version = [int(i) for i in sys.version.split()[0].split(".")]
@@ -509,6 +524,11 @@ class AiHordeClient:
             # Falling back to urllib, user experience will be uglier
             # when waiting...
             try:
+                if self._should_stop:
+                    self.process_interrupted = True
+                    self.finished_task = True
+                    logging.debug("Interrupted")
+                    return
                 if os.name == "nt" and self.client_name == "AiHordeForGimp":
                     windowspython_nossl()
                 else:
@@ -524,6 +544,9 @@ class AiHordeClient:
                 log_exception(ex)
                 self.timeout = ex
             self.finished_task = True
+
+        if self.process_interrupted:
+            raise IdentifiedError(MESSAGE_PROCESS_INTERRUPTED)
 
         if self.timeout:
             raise self.timeout
@@ -669,6 +692,13 @@ class AiHordeClient:
         list of strings or fixed values.
         """
         return self.settings.get("requirements", {model: {}}).get(model, {})
+
+    def cancel_process(self):
+        """
+        Interrupts the process.  The effect is to finish the process with
+        an IdentifiedException with MESSAGE_PROCESS_INTERRUPTED
+        """
+        self._should_stop = True
 
     def refresh_models(self):
         """

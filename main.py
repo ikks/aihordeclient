@@ -16,10 +16,17 @@ import os
 import random
 import sys
 import tempfile
-from aihordeclient import AiHordeClient, InformerFrontend, ANONYMOUS_KEY
+from aihordeclient import (
+    AiHordeClient,
+    InformerFrontend,
+    ANONYMOUS_KEY,
+    IdentifiedError,
+    MESSAGE_PROCESS_INTERRUPTED,
+)
+from typing import Any, Dict, Tuple
 
 
-DEBUG = True
+DEBUG = False
 
 VERSION = "0.2"
 
@@ -73,7 +80,10 @@ class SimpleInformer(InformerFrontend):
         # logger.info(f"{self.status} { self.progress }")
 
 
-def main():
+def configuration() -> Tuple[Dict[str, Any], AiHordeClient, SimpleInformer]:
+    """
+    Sets up options to call the service
+    """
     prompt = "blue cat with purple mouse"
     if sys.argv == 2:
         prompt = sys.argv[1]
@@ -106,21 +116,77 @@ def main():
             ["Blank Canvas XL", "Dreamshaper", "Ultraspice"]
         )
         print(ah_client.get_balance())
+
     print(f"Using model «{options['model']}»")
-    result = ah_client.generate_image(options)
-    warned = False
-    if "generated_url" in dir(informer):
-        warned = True
-        print(f"{informer.generated_url} to download in the future")
-    else:
-        for image in result:
-            print(image)
-        print(f"{ ah_client.get_tooltip()}")
 
-    if ah_client.status_url and not warned:
-        print(f"Please download from {ah_client.status_url}")
+    return options, ah_client, informer
 
-    print(ah_client.get_balance())
+
+def process(
+    options: Dict[str, Any], ah_client: AiHordeClient, informer: InformerFrontend
+):
+    """
+    Given that the service was configured, proceeding to make all the calls
+    """
+    try:
+        result = ah_client.generate_image(options)
+        warned = False
+        if "generated_url" in dir(informer):
+            warned = True
+            print(f"{informer.generated_url} to download in the future")
+        else:
+            for image in result:
+                print(image)
+            print(f"{ ah_client.get_tooltip()}")
+
+        if ah_client.status_url and not warned:
+            print(f"Please download from {ah_client.status_url}")
+
+        print(ah_client.get_balance())
+
+    except IdentifiedError as ex:
+        if ex.message == MESSAGE_PROCESS_INTERRUPTED:
+            print("Expected interruption")
+        if ah_client.status_url:
+            print(f"Grab the image from {ah_client.status_url}")
+
+
+def simple_sample() -> None:
+    """
+    Configuration and calling
+    """
+    options, ah_client, informer = configuration()
+    process(options, ah_client, informer)
+
+
+def cancel_sample() -> None:
+    """
+    The user will be able to cancel, there will be a delay because
+    if a request is being answered by the API, we wait it to finish
+    and stop from making new requests. This sample waits 10 seconds
+    to send a message to cancel the process.
+    """
+    options, ah_client, informer = configuration()
+
+    options["max_wait_minutes"] = 20
+
+    from threading import Thread
+
+    t = Thread(target=process, args=[options, ah_client, informer])
+    t.start()
+    print("Wait 10 seconds")
+    from time import sleep
+
+    sleep(10)
+    print("Interrupting")
+    logging.error("Interrupting\n\n\n")
+    ah_client.cancel_process()
+
+
+def main():
+    simple_sample()
+    # The next one shows how to cancel from the user
+    # cancel_sample()
 
 
 if __name__ == "__main__":
