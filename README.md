@@ -25,6 +25,8 @@ AIHORDE_API_KEY=<yourapikey> python main.py
 
 On success you will have a webp downloaded file in your temp directory.
 
+<img width="1324" height="610" alt="screensnot-2025-08-26-151233-annotated" src="https://github.com/user-attachments/assets/350c7b67-9b57-46cb-94c6-05a8bd1cccda" />
+
 
 This screenshot under [Debian](https://www.debian.org), [Sway](https://swaywm.org/) [Kitty terminal](https://sw-kovidgoyal-net.translate.goog/kitty/), [uv](https://docs.astral.sh/uv) and using [vv](https://github.com/wolfpld/moderncore/blob/master/doc/vv.md) to display the image.
 
