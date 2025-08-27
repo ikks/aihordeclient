@@ -7,11 +7,13 @@ There is an [official Python-SDK](https://pypi.org/project/aihorde/) from [AIHor
 
 ## USAGE
 
-```
+```sh
 pip install aihordeclient
 ```
+
 <details>
 <summary>In order to run a simple use and see the client in action, do:</summary>
+
 ```sh
 git clone https://github.com/ikks/aihordeclient/
 cd aihordeclient
