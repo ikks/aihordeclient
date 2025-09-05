@@ -15,6 +15,7 @@ from time import sleep
 from typing import Any, Dict, List, Tuple, Union
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
+from .translation_tool import opustm_hf_translate, OPUSTM_SOURCE_LANGUAGES  # noqa F401
 
 import abc
 import asyncio
@@ -142,7 +143,7 @@ def log_exception(information):
     """
     dnow = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ln = information.__traceback__.tb_lineno
-    logging.error(f"[{ dnow }]{ln}: { str(information) }")
+    logging.error(f"[{dnow}]{ln}: {str(information)}")
     logging.error(
         "".join(
             traceback.format_exception(None, information, information.__traceback__)
@@ -674,7 +675,7 @@ class AiHordeClient:
             else:
                 reqs[key] = val
 
-        logging.debug(f"Requirements for { model } are { reqs }")
+        logging.debug(f"Requirements for {model} are {reqs}")
         return reqs
 
     def __get_model_restrictions__(self, model: str) -> json:
@@ -858,7 +859,7 @@ class AiHordeClient:
         except HTTPError as ex:
             raise (ex)
 
-        return f"\n\nYou have { data['kudos'] } kudos"
+        return f"\n\nYou have {data['kudos']} kudos"
 
     def generate_image(self, options: json) -> [str]:
         """
@@ -965,7 +966,7 @@ class AiHordeClient:
 
             post_data = json.dumps(data_to_send).encode("utf-8")
 
-            url = f"{ API_ROOT }generate/async"
+            url = f"{API_ROOT}generate/async"
 
             request = Request(url, headers=self.headers, data=post_data)
             try:
@@ -977,11 +978,11 @@ class AiHordeClient:
                 if "warnings" in data:
                     self.warnings = data["warnings"]
                 text = _("Horde Contacted")
-                logging.debug(text + f" {self.check_counter} { self.progress }")
+                logging.debug(text + f" {self.check_counter} {self.progress}")
                 self.progress_text = text
                 self.__inform_progress__()
                 self.id = data["id"]
-                self.status_url = f"{ API_ROOT }generate/status/{ self.id }"
+                self.status_url = f"{API_ROOT}generate/status/{self.id}"
                 self.wait_time = data.get("wait_time", self.wait_time)
             except TimeoutError as ex:
                 message = _(
@@ -998,31 +999,31 @@ class AiHordeClient:
                         if self.api_key == ANONYMOUS_KEY:
                             message = (
                                 _(
-                                    f"Register at { REGISTER_AI_HORDE_URL  } and use your key to improve your rate success. Detail:"
+                                    f"Register at {REGISTER_AI_HORDE_URL} and use your key to improve your rate success. Detail:"
                                 )
-                                + f" { message }."
+                                + f" {message}."
                             )
                         else:
                             message = (
-                                f"{ self.client_help_url } "
+                                f"{self.client_help_url} "
                                 + _("to learn to earn kudos. Detail:")
-                                + f" { message }."
+                                + f" {message}."
                             )
                 except Exception as ex2:
                     log_exception(ex2)
                     message = str(ex)
                 logging.debug(message, data)
                 if self.api_key == ANONYMOUS_KEY and REGISTER_AI_HORDE_URL in message:
-                    self.informer.show_error(f"{ message }", url=REGISTER_AI_HORDE_URL)
+                    self.informer.show_error(f"{message}", url=REGISTER_AI_HORDE_URL)
                 else:
-                    self.informer.show_error(f"{ message }")
+                    self.informer.show_error(f"{message}")
                 return ""
             except URLError as ex:
                 log_exception(ex)
                 if data:
                     logging.debug(data)
                 self.informer.show_error(
-                    _("Internet required, chek your connection: ") + f"'{ ex }'."
+                    _("Internet required, chek your connection: ") + f"'{ex}'."
                 )
                 return ""
             except Exception as ex:
@@ -1044,7 +1045,7 @@ class AiHordeClient:
             return ""
         except Exception as ex:
             log_exception(ex)
-            self.informer.show_error(_("Service failed with: ") + f"'{ ex }'.")
+            self.informer.show_error(_("Service failed with: ") + f"'{ex}'.")
             return ""
         finally:
             self.informer.set_finished()
@@ -1062,7 +1063,7 @@ class AiHordeClient:
         progress = 100 - (int(self.max_time - datetime.now().timestamp()) * self.factor)
 
         logging.debug(
-            f'[{progress:.2f}/{self.settings["max_wait_minutes"] * 60}] {self.progress_text}',
+            f"[{progress:.2f}/{self.settings['max_wait_minutes'] * 60}] {self.progress_text}",
         )
 
         if self.informer and progress != self.progress:
@@ -1085,7 +1086,7 @@ class AiHordeClient:
         * Uses self.max_time
         * Queries self.api_key
         """
-        url = f"{ API_ROOT }generate/check/{ self.id }"
+        url = f"{API_ROOT}generate/check/{self.id}"
 
         self.__url_open__(url)
         data = self.response_data
@@ -1107,7 +1108,7 @@ class AiHordeClient:
             logging.debug(f"Wait time {data['wait_time']}")
         elif data["processing"] > 0:
             text = _("Generating...")
-            logging.debug(text + f" {self.check_counter} { self.progress }")
+            logging.debug(text + f" {self.check_counter} {self.progress}")
         self.progress_text = text
 
         if self.check_counter < self.check_max:
@@ -1194,7 +1195,7 @@ class AiHordeClient:
         to download them all.
         """
         self.stage = "Getting images"
-        url = f"{ API_ROOT }generate/status/{ self.id }"
+        url = f"{API_ROOT}generate/status/{self.id}"
         self.progress_text = _("Fetching images...")
         self.__inform_progress__()
         self.__url_open__(url)
@@ -1204,7 +1205,7 @@ class AiHordeClient:
             return []
         if data["generations"][0]["censored"]:
             image = data["generations"][0]
-            message = f'«{ self.settings["prompt"] }»' + _(
+            message = f"«{self.settings['prompt']}»" + _(
                 " is censored, try changing the prompt wording"
             )
             logging.error(message)
@@ -1229,21 +1230,21 @@ class AiHordeClient:
                 "wb+", delete=False, suffix=".webp"
             ) as generated_file:
                 if image["img"].startswith("https"):
-                    logging.debug(f"Downloading { image['img'] }")
+                    logging.debug(f"Downloading {image['img']}")
                     if nimages == 1:
                         self.progress_text = _("Downloading result...")
                     else:
                         self.progress_text = (
-                            _("Downloading image") + f" { cont }/{ nimages }"
+                            _("Downloading image") + f" {cont}/{nimages}"
                         )
                     self.__inform_progress__()
                     self.__url_open__(image["img"], only_read=True)
                     bytes = self.response_data
                 else:
-                    logging.debug(f"Storing embebed image { cont }")
+                    logging.debug(f"Storing embebed image {cont}")
                     bytes = base64.b64decode(image["img"])
 
-                logging.debug(f"Dumping to { generated_file.name }")
+                logging.debug(f"Dumping to {generated_file.name}")
                 generated_file.write(bytes)
                 generated_filenames.append(generated_file.name)
                 cont += 1

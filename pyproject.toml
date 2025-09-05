@@ -1,6 +1,6 @@
 [project]
 name = "aihordeclient"
-version = "0.2.0"
+version = "0.3.0"
 
 authors = [
   { name =  "Igor Támara", email = "igor.tamara@gmail.com" }
@@ -19,7 +19,10 @@ license = "MIT"
 
 license-files = ["LICEN[CS]E*"]
 
-dependencies = []
+dependencies = [
+    "sseclient-py==1.8.0",
+    "urllib3==2.2.3",
+]
 
 [build-system]
 requires = ["uv_build >= 0.7.19, <0.9.0"]

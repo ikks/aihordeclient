@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!env python
 # -*- coding: utf-8 -*-
 # Minimal sample usage of AiHordeClient
 # Authors:
@@ -10,6 +10,13 @@
 #
 # This script uses AiHordeClient class to generate an image
 # using AIHorde https://aihorde.net
+#
+
+
+# When you are developing, remember to run this as
+#
+# uv run main.py
+#
 
 import logging
 import os
@@ -17,11 +24,13 @@ import random
 import sys
 import tempfile
 from aihordeclient import (
+    opustm_hf_translate,
     AiHordeClient,
     InformerFrontend,
     ANONYMOUS_KEY,
     IdentifiedError,
     MESSAGE_PROCESS_INTERRUPTED,
+    OPUSTM_SOURCE_LANGUAGES,
 )
 from typing import Any, Dict, Tuple
 
@@ -80,13 +89,12 @@ class SimpleInformer(InformerFrontend):
         # logger.info(f"{self.status} { self.progress }")
 
 
-def configuration() -> Tuple[Dict[str, Any], AiHordeClient, SimpleInformer]:
+def configuration(
+    prompt: str = "blue cat with purple mouse",
+) -> Tuple[Dict[str, Any], AiHordeClient, SimpleInformer]:
     """
     Sets up options to call the service
     """
-    prompt = "blue cat with purple mouse"
-    if sys.argv == 2:
-        prompt = sys.argv[1]
 
     options = {
         "api_key": os.getenv("AIHORDE_API_KEY", ANONYMOUS_KEY),
@@ -137,12 +145,13 @@ def process(
         else:
             for image in result:
                 print(image)
-            print(f"{ ah_client.get_tooltip()}")
+            print(f"{ah_client.get_tooltip()}")
 
         if ah_client.status_url and not warned:
             print(f"Please download from {ah_client.status_url}")
 
-        print(ah_client.get_balance())
+        if options["api_key"] != ANONYMOUS_KEY:
+            print(ah_client.get_balance())
 
     except IdentifiedError as ex:
         if ex.message == MESSAGE_PROCESS_INTERRUPTED:
@@ -151,11 +160,11 @@ def process(
             print(f"Grab the image from {ah_client.status_url}")
 
 
-def simple_sample() -> None:
+def simple_sample(text) -> None:
     """
     Configuration and calling
     """
-    options, ah_client, informer = configuration()
+    options, ah_client, informer = configuration(text)
     process(options, ah_client, informer)
 
 
@@ -184,7 +193,17 @@ def cancel_sample() -> None:
 
 
 def main():
-    simple_sample()
+    if sys.argv == 2:
+        prompt = sys.argv[1]
+    else:
+        prompt = "Una vaca dentro de una lavadora"
+        prompt = "un chien buvant du lait"
+        print(f"translating «{prompt}»")
+        prompt = opustm_hf_translate(prompt, "fr")
+        print(f"prompt is «{prompt}»")
+
+    simple_sample(prompt)
+
     # The next one shows how to cancel from the user
     # cancel_sample()
 
