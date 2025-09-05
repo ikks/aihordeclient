@@ -18,11 +18,14 @@ runs
 uv run main.py
 ```
 
-After everything is ok with the new version
+After everything is ok with the new version, make sure you have a token
+that allows publishing and referring to the just built version under dists
 
 ```
 uv build && uv publish
 ```
+
+
 
 [Managing version](https://docs.astral.sh/uv/guides/package/#updating-your-version)
 
