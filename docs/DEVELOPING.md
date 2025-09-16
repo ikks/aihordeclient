@@ -2,14 +2,8 @@
 
 Install [uv](https://docs.astral.sh/uv/)
 
-To make a simple compatibility test for python3.8 run:
-
-```
-uv run src/aihordeclient.py
-```
-
 To make use of Opus translation from hf infrastructure we
-now depende on urllib3 and sseclient-py, maintaining 3.8 compatibility
+now depend on urllib3 and sseclient-py, maintaining 3.8 compatibility
 and upwards
 
 To preprare the package for the next release make sure the sample
@@ -18,11 +12,13 @@ runs
 uv run main.py
 ```
 
-After everything is ok with the new version, make sure you have a token
-that allows publishing and referring to the just built version under dists
+Then update the version with `uv version --bump patch` , minor or major,
+push to the repo.
+
+And publish
 
 ```
-uv build && uv publish
+uv build && uv publish -t $PYPI_AIHORDECLIENT_TOKEN dist/aihordeclient-$(grep version pyproject.toml | sed -E 's/.*"(.+).*"/\1/g')*
 ```
 
 

@@ -30,7 +30,6 @@ from aihordeclient import (
     ANONYMOUS_KEY,
     IdentifiedError,
     MESSAGE_PROCESS_INTERRUPTED,
-    OPUSTM_SOURCE_LANGUAGES,
 )
 from typing import Any, Dict, Tuple
 
@@ -166,6 +165,8 @@ def simple_sample(text) -> None:
     """
     options, ah_client, informer = configuration(text)
     process(options, ah_client, informer)
+    print(f"seed is {ah_client.settings['seed']}")
+    print(ah_client.get_full_description())
 
 
 def cancel_sample() -> None:

@@ -1229,6 +1229,8 @@ class AiHordeClient:
             with tempfile.NamedTemporaryFile(
                 "wb+", delete=False, suffix=".webp"
             ) as generated_file:
+                if self.settings.get("seed", "") == "":
+                    self.settings["seed"] = image["seed"]
                 if image["img"].startswith("https"):
                     logging.debug(f"Downloading {image['img']}")
                     if nimages == 1:

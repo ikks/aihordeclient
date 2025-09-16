@@ -20,7 +20,7 @@ cd aihordeclient
 uv venv -p 3.13
 source .venv/bin/activate
 uv pip install aihordeclient
-AIHORDE_API_KEY=<yourapikey> python main.py
+AIHORDE_API_KEY=<yourapikey> uv run main.py
 ```
 
 On success you will have a webp downloaded file in your temp directory.
