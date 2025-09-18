@@ -13,8 +13,8 @@ from datetime import date, datetime
 from pathlib import Path
 from time import sleep
 from typing import Any, Dict, List, Tuple, Union
-from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
+from urllib.request import urlopen, Request
 from .translation_tool import opustm_hf_translate, OPUSTM_SOURCE_LANGUAGES  # noqa F401
 
 import abc
@@ -22,12 +22,13 @@ import asyncio
 import base64
 import contextvars
 import functools
+import gettext
 import json
 import locale
 import logging
 import math
-import gettext
 import os
+import socket
 import ssl
 import sys
 import tempfile
@@ -45,6 +46,12 @@ REGISTER_AI_HORDE_URL = "https://aihorde.net/register"
 """
 Url to get an API Key from AI Horde
 """
+
+DISCORD_HELP = "https://discord.com/channels/781145214752129095/1020695869927981086"
+"""
+Join here if the service is showing errors
+"""
+
 ANONYMOUS_KEY = "0000000000"
 
 # check between 8 and 15 seconds
@@ -168,7 +175,7 @@ class IdentifiedError(Exception):
         return self.message
 
 
-class InformerFrontend(metaclass=abc.ABCMeta):
+class InformerFrontend:
     """
     Implementing this interface for an application frontend gives
     AIHordeClient a way to inform progress.  It's expected that
@@ -197,7 +204,7 @@ class InformerFrontend(metaclass=abc.ABCMeta):
         )
 
     def __init__(self):
-        self.generated_url = None
+        self.generated_url = ""
 
     @abc.abstractclassmethod
     def show_message(
@@ -279,9 +286,9 @@ class InformerFrontend(metaclass=abc.ABCMeta):
         Returns:
         None if there is no generation information, else returns
 
-        the URL
-        approximate checktime to be reviewed as a timestamp
-        text telling the URL and the expected time to be generated
+        * the URL
+        * approximate checktime to be reviewed as a timestamp
+        * a string text telling the URL and the expected time to be generated
         """
         if not self.generated_url:
             return None
@@ -402,6 +409,7 @@ class AiHordeClient:
 
         self._should_stop = False
         self.process_interrupted = False
+        self.kudos_cost = 0
 
     def __url_open__(
         self,
@@ -734,14 +742,14 @@ class AiHordeClient:
         try:
             self.__url_open__(url)
             del self.headers["X-Fields"]
-        except TimeoutError:
-            logging.debug("Failed updating models due to timeout")
+        except (socket.timeout, TimeoutError):
+            logging.error("Failed updating models due to timeout")
             return
         except (HTTPError, URLError):
             message = _(
                 "Service failed to get latest models, check your Internet connection"
             )
-            self.informer.show_error(message)
+            logging.error(message)
             return
 
         # Select the most popular models
@@ -856,10 +864,28 @@ class AiHordeClient:
             self.__url_open__(request, 15)
             data = self.response_data
             logging.debug(data)
+            return _("You have {} kudos").format(data["kudos"])
+        except KeyError as ex:
+            logging.error(f"find_user endpoint is having problems {ex}")
+            logging.debug(f"response was {data}")
         except HTTPError as ex:
+            if ex.code == 404:
+                raise IdentifiedError(
+                    _(
+                        "«{}» is not a valid API KEY, double check it or create a new one"
+                    ).format(self.api_key),
+                    REGISTER_AI_HORDE_URL,
+                )
+            elif ex.code == 403:
+                raise IdentifiedError(
+                    _(
+                        "At this moment we can not process your request, please try again later.  If this is happening for a long period of time, please let us know via Discord"
+                    ),
+                    DISCORD_HELP,
+                )
+            logging.error("Not able to fetch kudos")
             raise (ex)
-
-        return f"\n\nYou have {data['kudos']} kudos"
+        return _("Problem requesting kudos")
 
     def generate_image(self, options: json) -> [str]:
         """
@@ -884,6 +910,8 @@ class AiHordeClient:
         outside the requirements.
         """
         images_names = []
+        self.status_url = ""
+        self.wait_time: int = 1000
         self.stage = "Nothing"
         self.settings.update(options)
         self.api_key = options["api_key"]
@@ -978,19 +1006,50 @@ class AiHordeClient:
                 if "warnings" in data:
                     self.warnings = data["warnings"]
                 text = _("Horde Contacted")
+                self.kudos_cost = data["kudos"]
+                self.settings["kudos_cost"] = self.kudos_cost
                 logging.debug(text + f" {self.check_counter} {self.progress}")
                 self.progress_text = text
                 self.__inform_progress__()
                 self.id = data["id"]
                 self.status_url = f"{API_ROOT}generate/status/{self.id}"
+                self.informer.set_generated_image_url_status(self.status_url, 600)
+                logging.debug(self.informer.get_generated_image_url_status()[2])
                 self.wait_time = data.get("wait_time", self.wait_time)
-            except TimeoutError as ex:
+            except (socket.timeout, TimeoutError) as ex:
                 message = _(
                     "When trying to ask for the image, the Horde was too slow, try again later"
                 )
                 log_exception(ex)
                 raise IdentifiedError(message)
             except HTTPError as ex:
+                if ex.code == 503:
+                    raise IdentifiedError(
+                        _(
+                            "The Horde is in maintenance mode, please try again later, if you have tried and the service does not respond for hours, please contact via Discord"
+                        ),
+                        DISCORD_HELP,
+                    )
+                elif ex.code == 429:
+                    raise IdentifiedError(
+                        _(
+                            "You have made too many requests, please wait for them to finish, and try again later"
+                        )
+                    )
+                elif ex.code == 401:
+                    raise IdentifiedError(
+                        _(
+                            "Seems that «{}» has problems, double check it, create a new one or join Discord to ask for help"
+                        ).format(self.api_key),
+                        DISCORD_HELP,
+                    )
+                elif ex.code == 403:
+                    raise IdentifiedError(
+                        _(
+                            "At this moment we can not process your request, please try again later.  If this is happening for a long period of time, please let us know via Discord"
+                        ),
+                        DISCORD_HELP,
+                    )
                 try:
                     data = ex.read().decode("utf-8")
                     data = json.loads(data)
@@ -1028,14 +1087,15 @@ class AiHordeClient:
                 return ""
             except Exception as ex:
                 log_exception(ex)
-                self.informer.show_error(str(ex))
+                url = ""
+                if isinstance(ex, IdentifiedError):
+                    url = ex.url
+                self.informer.show_error(str(ex), url=url)
                 return ""
 
             self.__check_if_ready__()
-            self.wait_time = 0
             images = self.__get_images__()
             images_names = self.__get_images_filenames__(images)
-            self.status_url = ""
 
         except IdentifiedError as ex:
             if ex.url:
@@ -1043,15 +1103,50 @@ class AiHordeClient:
             else:
                 self.informer.show_error(str(ex))
             return ""
+        except HTTPError as ex:
+            if ex.code == 503:
+                raise IdentifiedError(
+                    _(
+                        "The Horde is in maintenance mode, please try again later, if you have tried and the service does not respond for hours, please contact via Discord"
+                    ),
+                    DISCORD_HELP,
+                )
+            elif ex.code == 404:
+                result = self.informer.get_generated_image_url_status()
+                if result:
+                    raise IdentifiedError(
+                        _("We hit an error, still: ") + result[2], result[0]
+                    )
+                else:
+                    raise IdentifiedError(
+                        _(
+                            "No longer valid, please try again.  Your request took too long"
+                        )
+                    )
+            elif ex.code == 403:
+                result = self.informer.get_generated_image_url_status()
+                if result:
+                    raise IdentifiedError(
+                        _("We hit an error, still: ") + result[2], result[0]
+                    )
+                else:
+                    raise IdentifiedError(
+                        _(
+                            "At this moment we can not process your request, please try again later.  If this is happening for a long period of time, please let us know via Discord"
+                        ),
+                        DISCORD_HELP,
+                    )
         except Exception as ex:
             log_exception(ex)
             self.informer.show_error(_("Service failed with: ") + f"'{ex}'.")
             return ""
         finally:
             self.informer.set_finished()
-            message = self.check_update()
-            if message:
-                self.informer.show_message(message, url=self.client_download_url)
+            if not self.process_interrupted:
+                # We will not check for update if interrupted by the user
+                message = self.check_update()
+                if message:
+                    self.informer.show_message(message, url=self.client_download_url)
 
         return images_names
 
@@ -1085,6 +1180,8 @@ class AiHordeClient:
         * Uses self.check_counter
         * Uses self.max_time
         * Queries self.api_key
+
+        Raises and propagates exceptions
         """
         url = f"{API_ROOT}generate/check/{self.id}"
 
@@ -1121,7 +1218,7 @@ class AiHordeClient:
                 self.informer.set_generated_image_url_status(
                     self.status_url, data["wait_time"]
                 )
-                logging.debug(self.informer.get_generated_image_url_status())
+                logging.debug(self.informer.get_generated_image_url_status()[2])
                 if self.api_key == ANONYMOUS_KEY:
                     message = (
                         _("Get a free API Key at ")
@@ -1151,8 +1248,7 @@ class AiHordeClient:
                 for i in range(1, wait_time * 2):
                     sleep(0.5)
                     self.__inform_progress__()
-                self.__check_if_ready__()
-                return False
+                return self.__check_if_ready__()
             else:
                 logging.debug(data)
                 raise IdentifiedError(
@@ -1314,6 +1410,7 @@ class AiHordeClient:
             "steps",
             "nsfw",
             "censor_nsfw",
+            "kudos_cost",
         ]
 
         result = ["".join((op, " : ", str(self.settings[op]))) for op in options]
@@ -1412,3 +1509,16 @@ class ProcedureInformation:
 
         logging.debug(current_choices)
         st_manager.save(current_choices)
+
+
+# * [ ] Add support for styles
+# * [ ] Fetch list of styles https://aihorde.net/api/v2/styles/image?sort=popular&page=1
+# * [ ] Create an image based on a style. Makes a post wit the information from the style
+# * [ ] Fetch my styles
+# * [ ] Have a default list of styles
+# * [ ] Create a style POST with a tag identifying the user to get own styles filtering by tag
+# * [ ] Fetch information for a particular style
+# * [ ] Delete a style
+# * [ ] Modify a style
+# * [ ] Clone style
+# * [ ] Upload an example style

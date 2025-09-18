@@ -55,6 +55,7 @@ logging.basicConfig(
 
 class SimpleInformer(InformerFrontend):
     def __init__(self):
+        super().__init__()
         self.finished: bool = False
         self.progress: float = 0.0
         self.status: str = ""
@@ -137,17 +138,16 @@ def process(
     """
     try:
         result = ah_client.generate_image(options)
-        warned = False
-        if "generated_url" in dir(informer):
-            warned = True
-            print(f"{informer.generated_url} to download in the future")
-        else:
-            for image in result:
-                print(image)
-            print(f"{ah_client.get_tooltip()}")
 
-        if ah_client.status_url and not warned:
-            print(f"Please download from {ah_client.status_url}")
+        if result:
+            for image in result:
+                print("✨✨✨✨✨\n\nvv " + image + "\n\n")
+        else:
+            # If no images were generated, still review if there is option to download
+            # one being processed
+            print(f"{ah_client.get_tooltip()}")
+            if informer.generated_url:
+                print("✅\n\n" + informer.get_generated_image_url_status()[2])
 
         if options["api_key"] != ANONYMOUS_KEY:
             print(ah_client.get_balance())
@@ -169,14 +169,14 @@ def simple_sample(text) -> None:
     print(ah_client.get_full_description())
 
 
-def cancel_sample() -> None:
+def cancel_sample(text) -> None:
     """
     The user will be able to cancel, there will be a delay because
     if a request is being answered by the API, we wait it to finish
     and stop from making new requests. This sample waits 10 seconds
     to send a message to cancel the process.
     """
-    options, ah_client, informer = configuration()
+    options, ah_client, informer = configuration(text)
 
     options["max_wait_minutes"] = 20
 
@@ -191,22 +191,30 @@ def cancel_sample() -> None:
     print("Interrupting")
     logging.error("Interrupting\n\n\n")
     ah_client.cancel_process()
+    if informer.generated_url:
+        print("✅\n\n" + informer.get_generated_image_url_status()[2])
 
 
 def main():
     if sys.argv == 2:
         prompt = sys.argv[1]
     else:
-        prompt = "Una vaca dentro de una lavadora"
-        prompt = "un chien buvant du lait"
-        print(f"translating «{prompt}»")
-        prompt = opustm_hf_translate(prompt, "fr")
+        prompts = (
+            ("Una vaca dentro de una lavadora", "es"),
+            ("un chien buvant du lait", "fr"),
+        )
+        chosen = random.choice(prompts)
+        if isinstance(chosen[0], str):
+            print(f"translating «{chosen[0]}»")
+            prompt = opustm_hf_translate(*chosen)
+        else:
+            prompt = chosen[0]
         print(f"prompt is «{prompt}»")
 
-    simple_sample(prompt)
+    # simple_sample(prompt)
 
     # The next one shows how to cancel from the user
-    # cancel_sample()
+    cancel_sample(prompt)
 
 
 if __name__ == "__main__":
