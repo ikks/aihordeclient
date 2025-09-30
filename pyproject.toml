@@ -1,6 +1,6 @@
 [project]
 name = "aihordeclient"
-version = "0.3.2"
+version = "0.4"
 
 authors = [
   { name =  "Igor Támara", email = "igor.tamara@gmail.com" }
