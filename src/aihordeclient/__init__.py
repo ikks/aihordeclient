@@ -567,6 +567,26 @@ class AiHordeClient:
         if self.timeout:
             raise self.timeout
 
+    def get_model_reference(self) -> Dict[str, Any]:
+        """
+        Fetches the aihorde models reference as json from
+        https://github.com/Haidra-Org/AI-Horde-Styles
+        """
+        url = self.MODEL_REQUIREMENTS_URL
+        self.progress_text = _("Getting models reference...")
+        self.__url_open__(url)
+        return self.response_data
+
+    def get_style_reference(self) -> Dict[str, Any]:
+        """
+        Fetches the aihorde styles_info reference as json from
+        https://github.com/Haidra-Org/AI-Horde-image-model-reference
+        """
+        url = self.STYLE_REFERENCE_URL
+        self.progress_text = _("Getting styles reference...")
+        self.__url_open__(url)
+        return self.response_data
+
     def __update_models_requirements__(self) -> None:
         """
         Downloads model requirements.

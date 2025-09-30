@@ -225,6 +225,12 @@ def get_styles(output_file="", tag: str = "", model: str = ""):
     # flux,nova anime xl,flux-cinematic,faetastic (flux),
 
 
+def fetch_model_and_style_reference():
+    _, ah_client, _ = configuration(check_balance=False)
+    print(f"Fetched\n * {len(ah_client.get_model_reference())} models and")
+    print(f" * {len(ah_client.get_style_reference())} styles")
+
+
 def create_style():
     # with open("your_file_name.json", "r") as file:
     #     data = json.load(file)
