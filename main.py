@@ -227,8 +227,10 @@ def get_styles(output_file="", tag: str = "", model: str = ""):
 
 def fetch_model_and_style_reference():
     _, ah_client, _ = configuration(check_balance=False)
-    print(f"Fetched\n * {len(ah_client.get_model_reference())} models and")
-    print(f" * {len(ah_client.get_style_reference())} styles")
+    print(
+        f"Fetched\n * ({len(ah_client.get_model_reference())}/{len(ah_client.get_model_status())}) reference models, with known status and"
+    )
+    print(f" * {len(ah_client.get_style_reference())} reference styles")
 
 
 def create_style():
@@ -293,6 +295,8 @@ def main():
 
     # get_styles("/tmp/va.json")
     # create_style()
+    #
+    # fetch_model_and_style_reference()
 
 
 if __name__ == "__main__":

@@ -587,6 +587,35 @@ class AiHordeClient:
         self.__url_open__(url)
         return self.response_data
 
+    def get_model_status(self, type_model: str = "image") -> Dict[str, Any]:
+        """
+        Gets current status for the models, useful for filtering out
+        models that are not currently active.
+        """
+        try:
+            url = API_ROOT + "status/models"
+            self.progress_text = _("Getting model status...")
+            self.__url_open__(url)
+            return self.response_data
+        except (socket.timeout, TimeoutError) as ex:
+            message = _(
+                "When trying to get model statuses, the Horde was too slow. Try again later"
+            )
+            log_exception(ex)
+            raise IdentifiedError(message)
+        except HTTPError as ex:
+            if ex.code == 503:
+                raise IdentifiedError(
+                    _(
+                        "The Horde is in maintenance mode, please try again later, if you have tried and the service does not respond for hours, please contact via Discord"
+                    ),
+                    DISCORD_HELP,
+                )
+            elif ex.code == 400:
+                reasons = json.loads(ex.read().decode("utf-8"))
+                logging.error(reasons)
+                return
+
     def __update_models_requirements__(self) -> None:
         """
         Downloads model requirements.
