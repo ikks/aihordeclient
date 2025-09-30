@@ -18,11 +18,13 @@
 # uv run main.py
 #
 
+import json
 import logging
 import os
 import random
 import sys
 import tempfile
+
 from aihordeclient import (
     opustm_hf_translate,
     AiHordeClient,
@@ -90,7 +92,7 @@ class SimpleInformer(InformerFrontend):
 
 
 def configuration(
-    prompt: str = "blue cat with purple mouse",
+    prompt: str = "blue cat with purple mouse", check_balance=True
 ) -> Tuple[Dict[str, Any], AiHordeClient, SimpleInformer]:
     """
     Sets up options to call the service
@@ -119,13 +121,11 @@ def configuration(
         "sample_client",
         informer,
     )
-    if options["api_key"] != ANONYMOUS_KEY:
+    if options["api_key"] != ANONYMOUS_KEY and check_balance:
         options["model"] = random.choice(
             ["Blank Canvas XL", "Dreamshaper", "Ultraspice"]
         )
         print(ah_client.get_balance())
-
-    print(f"Using model «{options['model']}»")
 
     return options, ah_client, informer
 
@@ -195,6 +195,74 @@ def cancel_sample(text) -> None:
         print("✅\n\n" + informer.get_generated_image_url_status()[2])
 
 
+def get_styles(output_file="", tag: str = "", model: str = ""):
+    """
+    Get the styles filtered by tag and model and store them in output_file
+    """
+
+    _, ah_client, _ = configuration(check_balance=False)
+    got_styles = ah_client.get_styles()
+    styles_info = [
+        f"{style['name']} used {style['use_count']} times" for style in got_styles
+    ]
+    if not styles_info:
+        print("No styles")
+        return
+
+    print(
+        "Got {} styles on page 1, among...\n\n * ".format(len(styles_info))
+        + "\n * ".join(styles_info[:5])
+        + "\n\n\n"
+    )
+
+    if output_file:
+        to_write = {}
+        for item in got_styles:
+            to_write[item["name"]] = item
+        with open(output_file, "w") as the_file:
+            json.dump(to_write, the_file, indent=2)
+
+    # flux,nova anime xl,flux-cinematic,faetastic (flux),
+
+
+def create_style():
+    # with open("your_file_name.json", "r") as file:
+    #     data = json.load(file)
+
+    data = {
+        "ame": "ol-flux",
+        "info": "My first test",
+        "examples": [],
+        "prompt": "{p}{np}",
+        "params": {
+            "steps": 4,
+            "sampler_name": "k_euler",
+            "cfg_scale": 1.0,
+            "height": 384,
+            "width": 384,
+            "karras": False,
+            "loras": [],
+        },
+        "public": True,
+        "nsfw": False,
+        "tags": [
+            "loaihorde",
+        ],
+        "models": ["Flux.1-Schnell fp8 (Compact)"],
+    }
+
+    _, ah_client, _ = configuration(check_balance=False)
+    # try:
+    #     response = ah_client.create_style(data)
+    # except IdentifiedError:
+    #     # Expected, because name was missing, mispelled by ame
+    #     pass
+    data["name"] = "ol-flux"
+    del data["ame"]
+    response = ah_client.create_style(data)
+    print(response)
+
+
 def main():
     if sys.argv == 2:
         prompt = sys.argv[1]
@@ -202,19 +270,23 @@ def main():
         prompts = (
             ("Una vaca dentro de una lavadora", "es"),
             ("un chien buvant du lait", "fr"),
+            "blue cat with purple mouse",
         )
         chosen = random.choice(prompts)
-        if isinstance(chosen[0], str):
+        if isinstance(chosen, tuple):
             print(f"translating «{chosen[0]}»")
             prompt = opustm_hf_translate(*chosen)
         else:
-            prompt = chosen[0]
+            prompt = chosen
         print(f"prompt is «{prompt}»")
 
-    # simple_sample(prompt)
+    simple_sample(prompt)
 
-    # The next one shows how to cancel from the user
-    cancel_sample(prompt)
+    # The next line shows how to cancel from the user
+    # cancel_sample(prompt)
+
+    # get_styles("/tmp/va.json")
+    # create_style()
 
 
 if __name__ == "__main__":

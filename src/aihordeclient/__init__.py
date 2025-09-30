@@ -34,6 +34,7 @@ import sys
 import tempfile
 import time
 import traceback
+import urllib.parse
 
 _ = gettext.gettext
 
@@ -47,7 +48,7 @@ REGISTER_AI_HORDE_URL = "https://aihorde.net/register"
 Url to get an API Key from AI Horde
 """
 
-DISCORD_HELP = "https://discord.com/channels/781145214752129095/1020695869927981086"
+DISCORD_HELP = "https://discord.gg/ZaJevNJs"
 """
 Join here if the service is showing errors
 """
@@ -342,7 +343,12 @@ class AiHordeClient:
 
     MODEL_REQUIREMENTS_URL = "https://raw.githubusercontent.com/Haidra-Org/AI-Horde-image-model-reference/refs/heads/main/stable_diffusion.json"
     """
-    URL of model requirements, the information is injected in the payload to have defaults and avoid warnings
+    URL of model reference, the information is injected in the payload to have defaults and avoid warnings
+    """
+
+    STYLE_REFERENCE_URL = "https://raw.githubusercontent.com/Haidra-Org/AI-Horde-Styles/refs/heads/main/styles.json"
+    """
+    URL of style reference, sane defaults for models
     """
 
     def __init__(
@@ -378,6 +384,7 @@ class AiHordeClient:
         self.status_url: str = ""
         self.wait_time: int = 1000
 
+        self.model_reference = ""
         self.url_version_update: str = url_version_update
         self.client_help_url: str = client_help_url
         self.client_download_url: str = client_download_url
@@ -595,6 +602,7 @@ class AiHordeClient:
         self.progress_text = _("Updating model requirements...")
         self.__url_open__(url)
         model_information = self.response_data
+        self.model_reference = model_information
         req_info = {}
 
         for model, reqs in model_information.items():
@@ -864,7 +872,7 @@ class AiHordeClient:
             self.__url_open__(request, 15)
             data = self.response_data
             logging.debug(data)
-            return _("You have {} kudos").format(data["kudos"])
+            return _("You have {} kudos").format(int(data["kudos"]))
         except KeyError as ex:
             logging.error(f"find_user endpoint is having problems {ex}")
             logging.debug(f"response was {data}")
@@ -886,6 +894,152 @@ class AiHordeClient:
             logging.error("Not able to fetch kudos")
             raise (ex)
         return _("Problem requesting kudos")
+
+    def get_styles(
+        self, sort: str = "popular", page: int = 1, tag: str = "", model: str = ""
+    ) -> str:
+        """
+        Returns the styles in the specified page, can be sorted by `popular `or `age`
+        paginated and filtered by tag or model name. All the parameters will be
+        urlencoded before the request
+        """
+        url = API_ROOT + "styles/image?%s"
+        original_params = {"sort": sort, "page": page}
+        if tag:
+            original_params["tag"] = tag
+        if model:
+            original_params["model"] = model
+        params = urllib.parse.urlencode(original_params)
+        url = url % params
+        request = Request(url, headers=self.headers)
+        try:
+            self.__url_open__(request, 15)
+            data = self.response_data
+            logging.debug(data)
+            return data
+        except HTTPError as ex:
+            if ex.code == 403:
+                raise IdentifiedError(
+                    _(
+                        "At this moment we can not process your request, please try again later.  If this is happening for a long period of time, please let us know via Discord"
+                    ),
+                    DISCORD_HELP,
+                )
+            logging.error("Not able to get styles")
+            raise (ex)
+        return []
+
+    def add_sample_to_style(
+        self, style_id: str, img_url: str = "", primary: bool = False
+    ) -> json:
+        """
+        Endpoint users require to be customizer or trusted.
+        """
+        if self.api_key == ANONYMOUS_KEY:
+            raise IdentifiedError(
+                _("You need an API Key to create a style"), REGISTER_AI_HORDE_URL
+            )
+
+        url = f"{API_ROOT}styles/image/{style_id}/example"
+
+        data_to_send = {"url": img_url, "primary": primary}
+
+        post_data = json.dumps(data_to_send).encode("utf-8")
+        request = Request(url, headers=self.headers, data=post_data)
+        try:
+            self.stage = "Uploading example..."
+            self.__inform_progress__()
+            self.__url_open__(request, 15)
+            data = self.response_data
+            return data
+        except (socket.timeout, TimeoutError) as ex:
+            message = _(
+                "When trying to upload an example to the style, the Horde was too slow. Try again later"
+            )
+            log_exception(ex)
+            raise IdentifiedError(message)
+        except HTTPError as ex:
+            if ex.code == 503:
+                raise IdentifiedError(
+                    _(
+                        "The Horde is in maintenance mode, please try again later, if you have tried and the service does not respond for hours, please contact via Discord"
+                    ),
+                    DISCORD_HELP,
+                )
+            elif ex.code == 400:
+                reasons = json.loads(ex.read().decode("utf-8"))
+                logging.error(reasons)
+                return
+            elif ex.code == 401:
+                raise IdentifiedError(
+                    _(
+                        "Seems that «{}» has problems, double check it, create a new one or join Discord to ask for help"
+                    ).format(self.api_key),
+                    DISCORD_HELP,
+                )
+            elif ex.code == 403:
+                reasons = json.loads(ex.read().decode("utf-8"))
+                logging.error(reasons)
+                raise IdentifiedError(
+                    _(
+                        "Double check your permissions, maybe you need to ask for more permissions, join Discord to ask for help"
+                    ),
+                    DISCORD_HELP,
+                )
+
+    def create_style(self, data_to_send: json) -> json:
+        """
+        Endpoints users require to be customizer or trusted.
+        """
+        if self.api_key == ANONYMOUS_KEY:
+            raise IdentifiedError(
+                _("You need an API Key to create a style"), REGISTER_AI_HORDE_URL
+            )
+
+        url = f"{API_ROOT}styles/image"
+
+        post_data = json.dumps(data_to_send).encode("utf-8")
+        request = Request(url, headers=self.headers, data=post_data)
+        try:
+            self.stage = "Creating style..."
+            self.__inform_progress__()
+            self.__url_open__(request, 15)
+            data = self.response_data
+            return data
+        except (socket.timeout, TimeoutError) as ex:
+            message = _(
+                "When trying to create the style, the Horde was too slow, try again later"
+            )
+            log_exception(ex)
+            raise IdentifiedError(message)
+        except HTTPError as ex:
+            if ex.code == 503:
+                raise IdentifiedError(
+                    _(
+                        "The Horde is in maintenance mode, please try again later, if you have tried and the service does not respond for hours, please contact via Discord"
+                    ),
+                    DISCORD_HELP,
+                )
+            elif ex.code == 400:
+                reasons = json.loads(ex.read().decode("utf-8"))
+                logging.error(reasons)
+                return
+            elif ex.code == 401:
+                raise IdentifiedError(
+                    _(
+                        "Seems that «{}» has problems, double check it, create a new one or join Discord to ask for help"
+                    ).format(self.api_key),
+                    DISCORD_HELP,
+                )
+            elif ex.code == 403:
+                reasons = json.loads(ex.read().decode("utf-8"))
+                logging.error(reasons)
+                raise IdentifiedError(
+                    _(
+                        "Double check your permissions, maybe you need to ask for more permissions, join Discord to ask for help"
+                    ),
+                    DISCORD_HELP,
+                )
 
     def generate_image(self, options: json) -> [str]:
         """
@@ -1006,7 +1160,7 @@ class AiHordeClient:
                 if "warnings" in data:
                     self.warnings = data["warnings"]
                 text = _("Horde Contacted")
-                self.kudos_cost = data["kudos"]
+                self.kudos_cost = int(data["kudos"])
                 self.settings["kudos_cost"] = self.kudos_cost
                 logging.debug(text + f" {self.check_counter} {self.progress}")
                 self.progress_text = text
@@ -1512,10 +1666,11 @@ class ProcedureInformation:
 
 
 # * [ ] Add support for styles
-# * [ ] Fetch list of styles https://aihorde.net/api/v2/styles/image?sort=popular&page=1
-# * [ ] Create an image based on a style. Makes a post wit the information from the style
-# * [ ] Fetch my styles
+# * [X] Fetch list of styles https://aihorde.net/api/v2/styles/image?sort=popular&page=1
 # * [ ] Have a default list of styles
+# * [ ] Cache model referece (model requirements)
+# * [ ] Fetch style reference (Optionally cache)
+# * [ ] Get styles of a given model
 # * [ ] Create a style POST with a tag identifying the user to get own styles filtering by tag
 # * [ ] Fetch information for a particular style
 # * [ ] Delete a style
